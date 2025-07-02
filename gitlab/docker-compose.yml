@@ -1,0 +1,64 @@
+services:
+
+  gitlab:
+    image: 'gitlab/gitlab-ce:latest'
+    container_name: gitlab
+    restart: always
+    hostname: 'gitlab.local'
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url 'http://${GITLAB_DOMAIN}'
+        gitlab_rails['gitlab_shell_ssh_port'] = 2224
+    volumes:
+      - gitlab-config:/etc/gitlab
+      - gitlab-logs:/var/log/gitlab
+      - gitlab-data:/var/opt/gitlab
+    networks:
+      - gitlab-net
+
+  nginx:
+    image: 'nginx:latest'
+    container_name: nginx-proxy
+    restart: always
+    volumes:
+      - ./nginx/gitlab.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - gitlab
+    networks:
+      - gitlab-net
+
+  ngrok:
+      image: ngrok/ngrok:latest
+      container_name: ngrok-tunnel
+      restart: always
+      environment:
+        NGROK_AUTHTOKEN: ${NGROK_AUTHTOKEN}
+      command: 'http nginx:80 --domain=${GITLAB_DOMAIN} --log=stdout'
+      ports:
+        - "4040:4040"
+      depends_on:
+        - nginx
+      networks:
+      - gitlab-net
+
+  gitlab-runner:
+    image: 'gitlab/gitlab-runner:latest'
+    container_name: gitlab-runner
+    restart: always
+    depends_on:
+      - gitlab
+    volumes:
+      - gitlab-runner-config:/etc/gitlab-runner
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - gitlab-net
+
+volumes:
+  gitlab-config:
+  gitlab-logs:
+  gitlab-data:
+  gitlab-runner-config:
+
+networks:
+  gitlab-net:
+    driver: bridge
